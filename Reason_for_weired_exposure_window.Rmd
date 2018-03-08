@@ -1,0 +1,131 @@
+---
+title: "Reason for weird Exposure window distribution"
+author: "Nancy"
+date: "February 16, 2018"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 5
+    theme: united
+    highlight: tango
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+#### Why do I get weired distribution of exposure length in my nested case control cohort?
+```{r,echo=F}
+library(pacman)
+p_load(tidyverse,data.table,gridExtra,magrittr)
+#show distribution:
+ramq_cc<-readRDS('ramq_cc.RData')
+case_final<-fread('C:/Users/Nancy Zhu/OneDrive - McGill University/Code for thesis/case_final.csv',stringsAsFactors = F)
+complete_set<-fread('C:/Users/Nancy Zhu/OneDrive - McGill University/Code for thesis/complete_set2.csv',stringsAsFactors = F)
+
+demo<-fread('E:/export_R/demo.csv',stringsAsFactors = F) 
+#no single individual was classified in more than one cohort, independent cohort
+#limit age from 67 to 100
+demo<-demo%>%filter(age>=67 & age<=100)%>%select(nam,age,sexe,cohort,dt_index)%>%distinct()
+#convert dt_index:
+demo$dt_index<-as.Date(demo$dt_index,origin = "1960-01-01")
+ramq_cc$status<-factor(ramq_cc$status,levels=c(0,1),labels=c(0,1))
+
+ramq_cc_exposure<-readRDS('ramq_cc_exposure.RData')
+```
+
+```{r,fig.height=4,fig.width=8}
+p0<-ggplot(ramq_cc_exposure,aes(x=total_dur,fill=status,color=status))+geom_histogram(binwidth=30,alpha=0.3)+xlab('cumulative duration of exposure during follow-up(Days)')+
+            ggtitle('Exposure: LTRA')
+
+p0_1<-ggplot(ramq_cc_exposure,aes(x=statin_total_dur,fill=status,color=status))+geom_bar(binwidth=60,alpha=0.3)+xlab('cumulative duration of exposure during follow-up(Days)')+
+             ggtitle('Exposure: Statin')
+
+grid.arrange(p0,p0_1,nrow=1,ncol=2)
+
+```
+
+Both LTRA and Statin exposure showed a right skewed distribution of cumulative exposure time. This indicates that there might be something wrong with the composition of case-control cohort.
+
+
+```{r,fig.height=8,fig.width=8}
+#double check with demo data to confirm the trend, or just sampling error?
+p1<-ggplot(data=demo,aes(x=year(dt_index)))+geom_bar()+
+  labs(title='Entry year distribution',
+       subtitle='In RAMQ demo data')+
+  scale_y_continuous(limits=c(0,30000))+
+  scale_x_continuous(breaks=unique(year(demo$dt_index)))+
+  theme(axis.text.x=element_text(angle=45))
+#no, on the opposite less people get into cohort since 2002
+
+#check case_final to look at case and complete cohort entry date:
+p2<-ggplot(data=complete_set,aes(x=year(entry_date)))+geom_bar()+
+  labs(title='Entry year distribution',
+       subtitle='In base cohort before matching')+
+  scale_y_continuous(limits=c(0,30000))+
+  scale_x_continuous(breaks=unique(year(complete_set$entry_date)))+
+  theme(axis.text.x=element_text(angle=45))
+
+p3<-ggplot(data=case_final,aes(x=year(entry_date)))+geom_bar()+
+  labs(title='Entry year distribution',
+       subtitle='In Cases')+
+  scale_x_continuous(breaks=unique(year(case_final$entry_date)))+
+  theme(axis.text.x=element_text(angle=45))
+
+#check the cohort entry distribution in matched case control cohort:
+p4<-ggplot(data=ramq_cc,aes(x=year(tentry_date),fill=status))+geom_bar()+
+  labs(title='Entry year distribution',
+      subtitle='In matched case-control cohort')+
+  scale_y_continuous(limits=c(0,50000))+
+  scale_x_continuous(breaks=unique(year(ramq_cc$tentry_date)))+
+  theme(axis.text.x=element_text(angle=45))
+
+#seem like 2010 period is over-sampled in the cohort?
+
+grid.arrange(p1,p2,p3,p4,nrow=2,ncol=2)
+
+#why is that?
+```
+By looking at the distribution of cohort entry date in different data, it is obvious that in the nested case control cohort, individuals entering after 2010, especially 2011 is significantly over-sampled, compared to original dataset.
+
+
+```{r,fig.height=4,fig.width=4}
+#due to matching on follow-up period? Check tfu distribution between case and control, might be the reason!!!
+#check follow_up time distribution in cases:
+ggplot(data=subset(ramq_cc,status==1),aes(x=tfu))+geom_histogram(binwidth=50)+
+  labs(title='Follow-up time distribution',
+       subtitle='In Cases')
+
+#Most cases have short follow-up period:
+```
+Going back to check the distribution of follow-up time in cases and controls, notice that a majority of cases had really short follow_up period. Thus, in matching controls, either people who enter late in the study or cases were chosen as controls, thus over-sampling individuals who entered late (2010)
+
+
+This can be further confirmed by looking at the entry year distribution for individuals who had less than 200 days of follow-up time. Somehow in exposed individuals, most individual enter the cohort in 2011?
+```{r,fig.height=8,fig.width=8}
+p1<-ggplot(data=subset(ramq_cc,tfu<200),aes(x=year(tentry_date),fill=status))+geom_bar()+
+  labs(title='Entry year distribution',
+       subtitle='In nested case-control cohort with total follow_up time <200 days')+
+  scale_y_continuous(limits=c(0,30000))+
+  scale_x_continuous(breaks=unique(year(ramq_cc$tentry_date)))+
+  theme(axis.text.x=element_text(angle=45))
+
+
+#subset people with low exposure time period, check their cfu:
+p2<-ggplot(data=subset(ramq_cc_exposure,total_dur<200),aes(x=year(tentry_date),fill=status))+geom_bar()+
+  labs(title='Entry year distribution',
+       subtitle='In nested case-control cohort with cumulative LTRA exposure window <200 days')+
+  scale_x_continuous(breaks=unique(year(ramq_cc_exposure$tentry_date)))+
+  theme(axis.text.x=element_text(angle=45))
+
+p3<-ggplot(data=subset(ramq_cc_exposure,statin_total_dur<200),aes(x=year(tentry_date),fill=status))+geom_bar()+
+  labs(title='Entry year distribution',
+       subtitle='In nested case-control cohort with cumulative Statin exposure window <200 days')+
+  scale_x_continuous(breaks=unique(year(ramq_cc_exposure$tentry_date)))+
+  theme(axis.text.x=element_text(angle=45))
+
+grid.arrange(p1,p2,p3,ncol=2,nrow=2)
+```

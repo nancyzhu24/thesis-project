@@ -1,0 +1,255 @@
+---
+title: "EDA case control cohort"
+author: "Nancy"
+date: "February 6, 2018"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_depth: 5
+    theme: united
+    highlight: tango
+    fig_width: 5
+    fig_height: 6
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pacman)
+p_load(tidyverse,data.table,gridExtra,tableone,survival,magrittr)
+
+
+ramq_cc<-readRDS('ramq_cc.RData')
+ramq_cc$status<-factor(ramq_cc$status,levels=c(0,1),labels=c(0,1))
+```
+
+#### Check matching algorithm {.tabset}
+##### Distribution of length of follow-up between cases and controls {-}
+```{r,fig.height=4,fig.width=6}
+ggplot(data=subset(ramq_cc,tfu<1000),aes(x=tfu,fill=status))+
+    geom_histogram(binwidth=30,alpha=0.4)
+```
+
+```{r}
+tapply(ramq_cc$tfu,ramq_cc$status,summary)
+```
+
+##### Distribution of index age between cases and controls:{-}
+```{r,fig.height=4,fig.width=6}
+ggplot(data=ramq_cc,aes(x=tageind,fill=status))+
+    geom_histogram(alpha=0.3)
+
+tapply(ramq_cc$tageind,ramq_cc$status,summary)
+```
+
+##### Distribution of Year of entry and exit between cases and controls: {-}
+```{r,fig.height=4,fig.width=6}
+ggplot(data=ramq_cc,aes(x=year(tentry_date),fill=status))+
+    geom_bar(alpha=0.3)+scale_x_continuous(breaks=unique(year(ramq_cc$tentry_date)))+
+    ggtitle('Year of Entry')+
+    scale_fill_discrete(name='Outcome',labels=c('Control','Case'))
+
+ggplot(data=ramq_cc,aes(x=year(texit_date),fill=status))+
+    geom_bar(alpha=0.3)+scale_x_continuous(breaks=unique(year(ramq_cc$texit_date)))+
+    ggtitle('Year of Exit')+
+    scale_fill_discrete(name='Outcome',labels=c('Control','Case'))
+
+ggplot(data=subset(ramq_cc,status==1),aes(x=year(texit_date)))+
+    geom_bar(alpha=0.3)+scale_x_continuous(breaks=unique(year(ramq_cc$texit_date)))+
+    ggtitle('Year of Exit for Cases')
+    
+
+```
+
+#### Percent of cases sampled as controls:
+```{r}
+paste('Percent of cases sampled as control in Control group:',
+round(100*sum(!is.na(ramq_cc$tcase)&ramq_cc$status==0)/sum(ramq_cc$status==0),2))
+
+paste('Number of unique cases sampled as control:',ramq_cc%>%filter(tcase==1&status==0)%>%summarise(n=n_distinct(id)))
+#mean length of follow-up for those controls:
+a<-semi_join(ramq_cc[,c('id','tfu')],ramq_cc%>%filter(tcase==1&status==0)%>%
+                        distinct(id,tfu))
+paste('The Average follow-up time for those cases in the Control group:',round(a%>%summarise(mean=mean(tfu)),2))
+```
+
+From the result, about 23% the controls became cases at a later time point after being sampled as control. Also, a high proportion of cases were sampled as control. Therefore, there is a high degree of similarity between case and control groups in this study.
+
+#### Exposure pattern between case and control
+```{r}
+#load exposure dataset (subset of all prescription data where ahf code==481024)
+exposure<-readRDS('C:/Users/nzhu/Desktop/Thesis project/Code for thesis/RData files/LTRA.RData')
+
+#subset exposure data to individuals in ramq_cc cohort:
+exposure<-exposure%>%
+          left_join(distinct(ramq_cc,id,tentry_date,texit_date),by=c('nam'='id'))%>%
+          filter(!is.na(tentry_date))%>%  #select individuals in the ramq_cc dataset
+          distinct()
+
+paste0('Number of individuals from exposure set with 0 quantite and duree:',nrow(exposure%>%filter(quantite==0 & duree==0)))
+
+```
+
+```{r}
+#subset exposure data to include prescription history within follow-up period:
+#exposure<-exposure%>%filter(dt_serv>=tentry_date)
+
+#first dt_serv <texit_date
+#exposure<-exposure%>%group_by(nam)%>%mutate(first=min(dt_serv))%>%ungroup()%>%filter(first<=texit_date)
+
+
+exposure<-exposure%>%filter(dt_serv>=tentry_date & dt_serv<=texit_date)
+```
+
+```{r}
+#discontinuation definition: dt_serv(current) > dt_serv(before)+duree+15
+#more than 15 days gap between the start of current prescription and the end of last prescription
+
+#recency definition: the days between the end of last prescription and exit date
+exposure<-exposure%>%group_by(nam)%>%
+                     arrange(dt_serv)%>%
+                     mutate(interval=dt_serv-lag(dt_serv))%>%
+                     mutate(discontinue=ifelse(interval-lag(duree)>=15,1,0))%>%
+                     mutate(recency=as.numeric(last(texit_date)-last(dt_serv))-last(duree))%>%
+                     mutate(start_to_exit=as.numeric(texit_date-first(dt_serv)))%>%
+                     ungroup()
+#assign NA's in discontinue to 0 due to first observation in each group
+exposure$discontinue[is.na(exposure$discontinue)]<-0
+
+#check to see whether most exposure are continuous exposure?
+#look at distribution of difference between total duration vs (last prescription-first prescription)
+exposure_time<-exposure%>%group_by(nam)%>%
+                          mutate(total_dur=sum(duree),
+                                 total_time=as.numeric(max(dt_serv)-min(dt_serv)),
+                                 discontinue=sum(discontinue))%>%
+                                 ungroup()%>%
+                                 distinct(nam,total_dur,total_time,discontinue,
+                                          recency,start_to_exit)%>%
+                                 mutate(discontinue=as.factor(ifelse(discontinue>0,1,0)))
+#if total_time==0, one time user
+```
+
+```{r,warning=F}
+#combine exposure summary table to ramq_cc
+ramq_cc_exposure<-left_join(ramq_cc[,c('caseid','id','status')],exposure_time,by=c('id'='nam'))
+ramq_cc_exposure$exposure<-as.factor(ifelse(is.na(ramq_cc_exposure$total_time),0,1))
+tb<-table(ramq_cc_exposure$exposure,ramq_cc_exposure$status)
+rownames(tb)<-c('Unexposed','Exposed')
+colnames(tb)<-c('Control','Case')
+tb
+```
+#####Distribution of cumulative exposure time between cases and controls
+```{r,warning=F,fig.height=4,fig.width=6}
+ggplot(ramq_cc_exposure,aes(x=total_dur,fill=status,color=status))+geom_histogram(binwidth=20,alpha=0.3)+
+  xlab('cumulative duration of exposure during follow-up (Days)')+scale_y_continuous(limits=c(0,400))
+tapply(ramq_cc_exposure$total_dur,ramq_cc_exposure$status,summary)
+```
+
+There is a fairly large proportion of individuals having very short cumulative exposure.
+Is that because they start drug close to exit_date?
+
+##### Distribution of first prescription to exit date in cases and controls:
+```{r,warning=F,fig.height=4,fig.width=8}
+#start to exit :defined as texit-first prescription
+#total_time: defined as last(dt_serv)-first(dtserv)
+#overlaying both graph to see if there are many individuals who continued prescription after case definition:
+ggplot(data=ramq_cc_exposure,aes(x=start_to_exit,fill=status,color=status))+geom_histogram(binwidth=30,alpha=0.3)+
+  xlab('Start of first prescription to exit_date (Days)')+ggtitle('Whole case-control cohort')+scale_y_continuous(limits=c(0,300))
+
+ggplot(data=exposure_time,aes(x=start_to_exit))+geom_histogram(bins=25,alpha=0.2)+ggtitle('Exposed individuals')+scale_x_continuous(breaks=c(0,1000,1500))
+ 
+tapply(ramq_cc_exposure$start_to_exit,ramq_cc_exposure$status,summary)
+```
+
+
+#### Distribution of time from end of last prescription to exit date in cases and controls:
+```{r,warning=F,fig.height=4,fig.width=6}
+ggplot(ramq_cc_exposure,aes(x=recency,fill=status,color=status))+geom_histogram(bins=25,alpha=0.3)+
+  xlab('End of last prescription to exit_date (Days)')+scale_y_continuous(limits=c(0,1200))
+```
+
+A majority of cases either were still taking the drug at the time becoming a case or stopped taking the drug within short period of time before.
+
+##### Distribution of first and last year of exposure:
+```{r}
+#confirm with year of first prescription: (from exposure data)
+exposure_date<-exposure%>%group_by(nam)%>%mutate(first=min(dt_serv),
+                                                 last=max(dt_serv))%>%
+                                          ungroup()%>%
+                                          distinct(nam,first,last)
+
+```
+
+```{r,fig.height=4,fig.width=10}
+p1<-ggplot(data=exposure_date,aes(x=year(first)))+geom_bar()+ggtitle('First LTRA prescription by year')
+p2<-ggplot(data=exposure_date,aes(x=year(last)))+geom_bar()+ggtitle('Last LTRA prescription by year')
+gridExtra::grid.arrange(p1,p2,ncol=2,nrow=1)
+```
+
+
+Number of one-time user in cases and controls:
+One-time user here was defined by the number of available dt_serv equals to 1
+Some of the counts can come from patients who just start the prescription before exit the study.
+
+```{r}
+paste0('In Cases:',sum(ramq_cc_exposure$total_time==0&ramq_cc_exposure$status==1,na.rm=T))
+paste0('In Controls:',sum(ramq_cc_exposure$total_time==0&ramq_cc_exposure$status==0,na.rm=T))
+
+```
+
+Number of individuals who had discontinuation of prescription during follow-up:
+```{r}
+tb2<-table(ramq_cc_exposure$discontinue,ramq_cc_exposure$status)
+rownames(tb2)<-c('No discontinuation','Discontinuation')
+colnames(tb2)<-c('Control','Case')
+rbind(tb2,round(prop.table(tb2,2)[2,],2))
+```
+
+#### Apply cut-off oof 90 days to exposure:
+```{r}
+ramq_cc_exposure$exposure<-ifelse(ramq_cc_exposure$total_dur>=90,1,0)
+#convert NA's to 0:
+ramq_cc_exposure$exposure[is.na(ramq_cc_exposure$exposure)]<-0
+ramq_cc_exposure$exposure<-as.factor(ramq_cc_exposure$exposure)
+
+tb3<-table(ramq_cc_exposure$exposure,ramq_cc_exposure$status)
+colnames(tb3)<-c('Control','Case')
+rownames(tb3)<-c('No exposure','Exposure')
+tb3
+round(prop.table(tb3,2)[2,],4)
+```
+
+#### Comorbidity statistics:{.tabset}
+##### Overall combined {-}
+```{r}
+variables<-c('tageind','tfu','sexe','diabete_combined','ckd_combined','hypertension_combined',
+             'pvd_combined','cad_combined','copd_combined','hyperlipidemia_combined','hf_combined')
+factor_vars<-c('sexe','diabete_combined','ckd_combined','hypertension_combined',
+               'pvd_combined','cad_combined','copd_combined','hyperlipidemia_combined','hf_combined')
+
+CreateTableOne(variables,'status',ramq_cc,factorVars =factor_vars )
+```
+
+##### Diagnostic and Prescription {-}
+```{r}
+variables<-c('tageind','tfu','sexe','dyslipidemia','diabete','CKD','hypertension','COPD','CAD','peripheral','HF',
+             'theophylline','beta_agonist','inhaled_corti','ACE_ARB','diuretic','alpha_blocker','calcium_channel','thiazolidinediones','sulfonylure',
+             'biguanide','insulin','statin','nasaid','beta_blocker')
+factor_vars<-c('sexe','dyslipidemia','diabete','CKD','hypertension','COPD','CAD','peripheral','HF','theophylline',
+               'beta_agonist','inhaled_corti','ACE_ARB','diuretic','alpha_blocker','calcium_channel',
+               'thiazolidinediones','sulfonylure','biguanide','insulin','statin','nasaid','beta_blocker')
+
+CreateTableOne(variables,'status',ramq_cc,factorVars =factor_vars )
+```
+
+#### Conditional logistic model
+```{r}
+ramq_cc$status<-as.numeric(ramq_cc$status)
+ramq_cc$pair<-rleid(ramq_cc$caseid)
+ramq_cc$exposure<-ramq_cc_exposure$exposure
+model<-clogit(data=ramq_cc,status~exposure+sexe+diabete_combined+ckd_combined+hypertension_combined+
+                     pvd_combined+copd_combined+hyperlipidemia_combined+statin+strata(pair))
+
+summary(model)
+```
+
