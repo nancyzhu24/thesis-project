@@ -29,7 +29,7 @@ row.names(pharma)<-NULL
 saveRDS(pharma,'complete_pharma.RData')
 
 #ahf code is not accurately coded RAMQ:
-cdenom<-read.csv('../NMED_Denom_Comne.csv',header=T,encoding='latin1',stringsAsFactors=F)
+cdenom<-read.csv('../../NMED_Denom_Comne.csv',header=T,encoding='latin1',stringsAsFactors=F)
 #add leading zeros:
 # cdenom$Code.denom.comne<-as.character(cdenom$Code.denom.comne)
 # cdenom<-cdenom%>%mutate(code=case_when(nchar(Code.denom.comne)==2 ~ paste0('000',Code.denom.comne),
@@ -61,8 +61,9 @@ hyperlipidemia<-pharma%>%filter(ahf==240692|cdenom %in% hyperlipid)
 #Diabetes drug use: ahf code:682004; 682002;682005;682006;682008;682016;682020;682028;682092
 #major class of diabetes drugs:
 thiazolidinediones<-cdenom%>%filter(grepl('litazone',Description))%>%distinct(code)%>%pull()
-sulfonylurees<-cdenom%>%filter(grepl('gliclazide|glimepiride|
-                                     glimépiride|glyburide|tolbutamide',Description))%>%distinct(code)%>%pull()
+sulfonylurees<-cdenom%>%filter(grepl('gliclazide|glimepiride|glimépiride|glyburide|tolbutamide',Description))%>%
+  distinct(code)%>%pull()
+
 biguanides<-c(5824,47208,47807)
 insulin<-cdenom%>%filter(grepl('insuline',Description))%>%distinct(code)%>%pull()
 meglitinides<-cdenom%>%filter(grepl('linide',Description))%>%distinct(code)%>%pull()
@@ -71,26 +72,26 @@ meglitinides<-cdenom%>%filter(grepl('linide',Description))%>%distinct(code)%>%pu
 diabete<-pharma%>%filter(cdenom %in% c(thiazolidinediones,sulfonylurees,biguanides,insulin,meglitinides))
 
 #Hypertension drug use: ahf code: 240816;
-ACEI<-cdenom%>%filter(grepl('trandolapril|ramipril|quinapril|perindopril|périndopril|
-                            lisinopril|fosinopril|énalapril|cilazapril|captopril|bénazépril',Description))%>%
+ACEI<-cdenom%>%filter(grepl('trandolapril|ramipril|quinapril|perindopril|périndopril|lisinopril|fosinopril|énalapril|cilazapril|captopril|bénazépril',Description))%>%
   distinct(code)%>%pull()
 ARB<-cdenom%>%filter(grepl('sartan|aliskirène',Description))%>%distinct(code)%>%pull()
-diuretic<-cdenom%>%filter(grepl('chlorthalidone|indapamide|metolazone|^hydrochlorothiazide|spironolactone|amiloride',Description))%>%distinct(code)%>%pull()
+diuretic<-cdenom%>%filter(grepl('chlorthalidone|indapamide|metolazone|^hydrochlorothiazide|spironolactone|amiloride|triamtérène',Description))%>%distinct(code)%>%pull()
 alpha_blocker<-cdenom%>%filter(grepl('prazosin|doxazosine|térazosine',Description))%>%distinct(code)%>%pull()
-calcium_channel<-cdenom%>%filter(grepl('amlodipine|félodipine|nifédipine|nimodipine|verapamil|diltiazem',Description))%>%distinct(code)%>%pull()
+calcium_channel<-cdenom%>%filter(grepl('amlodipine|félodipine|nifédipine|nimodipine|verapamil|vérapamil|diltiazem',Description))%>%distinct(code)%>%pull()
 
 hypertension<-pharma%>%filter(cdenom %in% c(ACEI,ARB,diuretic,alpha_blocker,calcium_channel))
 
 #cardiovascular drugs:
-beta_blocker<-cdenom%>%filter(grepl('acébutolol|aténolol|bisoprolol|carvédilol|esmolol|
-                                    labetalol|métoprolol|nadolol|pindolol|propranolol|sotalol|^timolol',Description))%>%distinct(code)%>%pull()
+beta_blocker<-cdenom%>%filter(grepl('acébutolol|aténolol|bisoprolol|carvédilol|esmolol|labetalol|métoprolol|nadolol|pindolol|propranolol|sotalol|^timolol',Description))%>%
+  distinct(code)%>%pull()
+
 beta_user<-pharma%>%filter(cdenom %in% beta_blocker)
 
 #for asthma treatment, need to look at both ahf and din code
 theophylline<-cdenom%>%filter(grepl('aminophylline|oxtriphylline|théophylline',Description))%>%distinct(code)%>%pull()
 
-beta_agonist<-cdenom%>%filter(grepl('formoterol|indacatérol|formoterol|formotérol|
-                                    salmétérol|terbutaline|salbutamol',Description))%>%distinct(code)%>%pull()
+beta_agonist<-cdenom%>%filter(grepl('formoterol|indacatérol|formoterol|formotérol|salmétérol|terbutaline|salbutamol',Description))%>%
+  distinct(code)%>%pull()
 
 
 #din code for corticosteroides for asthma treatment:
@@ -102,9 +103,9 @@ cromoglycate<-c(39419)
 asthma<-pharma%>%filter(cdenom %in% c(theophylline,beta_agonist,cromoglycate) |din %in% asthma_cortico)
                  
 #use of NSAIDs:
-NASAID<-cdenom%>%filter(grepl('acétylsalicylique|célécoxib|celecoxib|diclofénac|étodolac|^ibuprofène|
-                              flurbiprofène|indométhacine|kétoprofène|méfénamique|méloxicam|nabumétone|
-                              nabumetone|naproxène|naproxene|piroxicam|sulindac|tenoxicam|tiaprofénique',Description))%>%
+NASAID<-cdenom%>%filter(grepl(paste0('acétylsalicylique|célécoxib|celecoxib|diclofénac|étodolac|^ibuprofène|',
+                              'flurbiprofène|indométhacine|kétoprofène|méfénamique|méloxicam|nabumétone|',
+                              'nabumetone|naproxène|naproxene|piroxicam|sulindac|tenoxicam|tiaprofénique'),Description))%>%
                  distinct(code)%>%pull()
 
 nasaid<-pharma%>%filter(cdenom %in% NASAID)

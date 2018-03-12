@@ -1,5 +1,5 @@
 #this file was used to ascertain covariates status from prescription data:
-objects <- list()
+objects <- vector(mode='list',length=7)
 files<-c('asthma','beta_user','diabete','hypertension','nasaid','statin_user','pvd')
 filename<-paste0('../RData files/',files, ".RData")
 for (i in seq_along(files)){
