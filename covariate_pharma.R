@@ -10,7 +10,7 @@ names(objects)<-c('asthma','beta_blocker','diabete','hypertension','nasaid','sta
 
 #select individuals with prescription history before cohort entry:
 #remove prescription record with 0 quantite input
-objects<-lapply(objects,function(x){x<-x%>%left_join(distinct(ramq_cc,id,tentry_date),by=c('nam'='id'))%>%
+objects_subset<-lapply(objects,function(x){x<-x%>%left_join(distinct(ramq_cc,id,tentry_date),by=c('nam'='id'))%>%
   filter(!is.na(tentry_date) & quantite!=0)%>%
   filter(dt_serv<tentry_date)
 return(x)})
@@ -18,6 +18,12 @@ return(x)})
 #further divide up categories into single medications:
 #for Table-one:
 #load cdenom code definitions from clean_pharma.R file:
+
+
+ramq_cc<-define_pharma(objects_subset,ramq_cc)
+
+define_pharma<-function(objects,ramq_cc){
+  
 theophylline<-objects[[1]]%>%filter(cdenom %in% theophylline)
 beta_agonist<-objects[[1]]%>%filter(cdenom %in% beta_agonist)
 inhaled_corti<-objects[[1]]%>%filter(din %in% asthma_cortico)
@@ -43,9 +49,6 @@ object2<-list(theophylline,beta_agonist,inhaled_corti,cromoglycate,ACE_ARB,Diure
               sulfonylurees,biguanides,insulin,statin,nasaid,beta_blocker)
 names(object2)<-c('theophylline','beta_agonist','inhaled_corti','cromoglycate','ACE_ARB','Diuretic','alpha_blocker','calcium_channel','thiazolidinediones',
                  'sulfonylurees','biguanides','insulin','statin','nasaid','beta_blocker')
-rm(theophylline,beta_agonist,inhaled_corti,cromoglycate,ACE_ARB,Diuretic,alpha_blocker,calcium_channel,thiazolidinediones,
-   sulfonylurees,biguanides,meglitinides,statin,nasaid,beta_blocker,insulin)
-
 
 #assign categorical columns to ramq_cc:
 ramq_cc<-ramq_cc%>%mutate(theophylline=ifelse(id %in% object2[[1]]$nam,1,0),
@@ -67,7 +70,16 @@ factors<-c('theophylline','beta_agonist','inhaled_corti','ACE_ARB','diuretic','a
            'sulfonylure','biguanide','statin','nasaid','beta_blocker','insulin')
 ramq_cc[,factors]<-lapply(ramq_cc[,factors],as.factor)
 
-rm(object2)
+#rm(object2)
+
+return(ramq_cc)
+
+}
+
+rm(theophylline,beta_agonist,inhaled_corti,cromoglycate,ACE_ARB,Diuretic,alpha_blocker,calcium_channel,thiazolidinediones,
+  sulfonylurees,biguanides,meglitinides,statin,nasaid,beta_blocker,insulin)
+
+
 #create tableone for descriptive analysis:
 # variables<-c('tage','tfu','sexe','dyslipidemia','diabete','CKD','hypertension','CAD','peripheral','COPD','theophylline','beta_agonist','inhaled_corti','ACE_ARB','diuretic','alpha_blocker','calcium_channel','thiazolidinediones',
 #              'sulfonylure','biguanide','statin','nasaid','beta_blocker','insulin')
@@ -77,7 +89,7 @@ rm(object2)
 
 
 #add hyperlipidemia column to indicate individual taking hyperlipidemia(excluding statin) medication:
-hyperlipidemia<-readRDS('C:/Users/nzhu/Desktop/Thesis project/Code for thesis/RData files/hyperlipidemia.RData')
+hyperlipidemia<-readRDS('../RData files/hyperlipidemia.RData')
 hyperlipidemia<-hyperlipidemia%>%
   left_join(distinct(ramq_cc,id,tentry_date),by=c('nam'='id'))%>%
   filter(dt_serv<tentry_date)
@@ -87,7 +99,7 @@ ramq_cc$hyperlipidemia_med<-as.factor(ifelse(ramq_cc$id %in% unique(hyperlipidem
 
 
 #add HF medication:
-HF<-readRDS('C:/Users/nzhu/Desktop/Thesis project/Code for thesis/RData files/HF_med.RData')%>%
+HF<-readRDS('../RData files/HF_med.RData')%>%
   left_join(distinct(ramq_cc,id,tentry_date),by=c('nam'='id'))%>%
   filter(dt_serv<tentry_date)
 

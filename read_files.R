@@ -33,9 +33,9 @@ ICD<-read.xlsx2('C:/Users/Nancy Zhu/OneDrive - McGill University/Thesis project/
 CCI<-read.xlsx2('C:/Users/Nancy Zhu/OneDrive - McGill University/Thesis project/CCI_vCCADTC_conv_Quebec_2006-2009 order by CCA-CCP.xls',1,stringsAsFactors=F)
 
 #check unique number of nam in each dataset:
-length(unique(me_diag$nam))
-length(unique(me_interv$nam))
-length(unique(sejour$nam))
+# length(unique(me_diag$nam))
+# length(unique(me_interv$nam))
+# length(unique(sejour$nam))
 
 #setdiff(demo$nam,me_diag$nam)
 

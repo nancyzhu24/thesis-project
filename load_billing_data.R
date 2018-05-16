@@ -3,7 +3,7 @@ package<-c('dplyr','ggplot2','tidyr','stringr',
 lapply(package,require,character.only=T)
 
 
-#look through billing code for surgical intervention:
+#load data
 file<-list.files(path='E:/')
 filename<-list.files(path='E:/',pattern='^bill_\\d{4}')
 filepath<-paste0('E:/',filename)
@@ -11,12 +11,16 @@ filepath<-paste0('E:/',filename)
 bill<-list()
 for (i in 1:12){
   bill[[i]]<-fread(filepath[i],stringsAsFactors = F)%>%
-    select(nam,diag,dt_serv,code_act)
+    select(nam,diag,dt_serv,code_act,cl_prof,sp_prof)
 }
 
 names(bill)<-filename[1:12]
 
-#filter code_act for AS surgical interventions to look at case numbers:
+
+
+
+########################################################################################################
+#filter code_act for AS surgical interventions to look at case numbers: (Comparing with hospitalization data for verification)
 AS_bill_code<-c(4547,4548,4542,4543,4546,4544)
 bill<-lapply(bill,function(x)x[x$code_act %in% AS_bill_code,])
 

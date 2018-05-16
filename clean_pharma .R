@@ -40,26 +40,11 @@ cdenom<-read.csv('../../NMED_Denom_Comne.csv',header=T,encoding='latin1',strings
 
 cdenom%<>%rename(code=Code.denom.comne)
 
-#Exposure:leukotriene receptor antagonist ahf code:481024
+## define prescription history with ahf code:
 ltra<-cdenom%>%filter(grepl('kast',Description))%>%distinct(code)%>%pull()
-
-#first need to figure out the prevalence of exposure!!
-exposure<-pharma%>%filter(cdenom %in% ltra)
-saveRDS(exposure,'LTRA.RData')
-
-
-
-#Confounders: statin use
 statin<-cdenom%>%filter(grepl('statine',Description))%>%filter(!grepl('nystatine|cilastatine|somatostatine',Description))%>%
-          distinct(code)%>%pull()
-
-
-statin_user<-pharma%>%filter(cdenom %in% statin)
-#hyperlipidemia: 240692
+  distinct(code)%>%pull()
 hyperlipid<-cdenom%>%filter(grepl('fibrate|fibrozil',Description))%>%distinct(code)%>%pull()
-hyperlipidemia<-pharma%>%filter(ahf==240692|cdenom %in% hyperlipid)
-#Diabetes drug use: ahf code:682004; 682002;682005;682006;682008;682016;682020;682028;682092
-#major class of diabetes drugs:
 thiazolidinediones<-cdenom%>%filter(grepl('litazone',Description))%>%distinct(code)%>%pull()
 sulfonylurees<-cdenom%>%filter(grepl('gliclazide|glimepiride|glimépiride|glyburide|tolbutamide',Description))%>%
   distinct(code)%>%pull()
@@ -67,9 +52,6 @@ sulfonylurees<-cdenom%>%filter(grepl('gliclazide|glimepiride|glimépiride|glybur
 biguanides<-c(5824,47208,47807)
 insulin<-cdenom%>%filter(grepl('insuline',Description))%>%distinct(code)%>%pull()
 meglitinides<-cdenom%>%filter(grepl('linide',Description))%>%distinct(code)%>%pull()
-
-
-diabete<-pharma%>%filter(cdenom %in% c(thiazolidinediones,sulfonylurees,biguanides,insulin,meglitinides))
 
 #Hypertension drug use: ahf code: 240816;
 ACEI<-cdenom%>%filter(grepl('trandolapril|ramipril|quinapril|perindopril|périndopril|lisinopril|fosinopril|énalapril|cilazapril|captopril|bénazépril',Description))%>%
@@ -79,13 +61,9 @@ diuretic<-cdenom%>%filter(grepl('chlorthalidone|indapamide|metolazone|^hydrochlo
 alpha_blocker<-cdenom%>%filter(grepl('prazosin|doxazosine|térazosine',Description))%>%distinct(code)%>%pull()
 calcium_channel<-cdenom%>%filter(grepl('amlodipine|félodipine|nifédipine|nimodipine|verapamil|vérapamil|diltiazem',Description))%>%distinct(code)%>%pull()
 
-hypertension<-pharma%>%filter(cdenom %in% c(ACEI,ARB,diuretic,alpha_blocker,calcium_channel))
-
 #cardiovascular drugs:
 beta_blocker<-cdenom%>%filter(grepl('acébutolol|aténolol|bisoprolol|carvédilol|esmolol|labetalol|métoprolol|nadolol|pindolol|propranolol|sotalol|^timolol',Description))%>%
   distinct(code)%>%pull()
-
-beta_user<-pharma%>%filter(cdenom %in% beta_blocker)
 
 #for asthma treatment, need to look at both ahf and din code
 theophylline<-cdenom%>%filter(grepl('aminophylline|oxtriphylline|théophylline',Description))%>%distinct(code)%>%pull()
@@ -98,15 +76,37 @@ beta_agonist<-cdenom%>%filter(grepl('formoterol|indacatérol|formoterol|formoté
 asthma_cortico<-as.integer(c(852074,851752,851760,2229099,1978918,1978926,2285606,2285614))
 cromoglycate<-c(39419)
 
+#use of NSAIDs:
+NASAID<-cdenom%>%filter(grepl(paste0('acétylsalicylique|célécoxib|celecoxib|diclofénac|étodolac|^ibuprofène|',
+                                     'flurbiprofène|indométhacine|kétoprofène|méfénamique|méloxicam|nabumétone|',
+                                     'nabumetone|naproxène|naproxene|piroxicam|sulindac|tenoxicam|tiaprofénique'),Description))%>%
+  distinct(code)%>%pull()
+
+##################################################################################################################
+
+#Exposure:leukotriene receptor antagonist ahf code:481024
+#first need to figure out the prevalence of exposure!!
+exposure<-pharma%>%filter(cdenom %in% ltra)
+saveRDS(exposure,'LTRA.RData')
+
+
+
+#Confounders: statin use
+statin_user<-pharma%>%filter(cdenom %in% statin)
+#hyperlipidemia: 240692
+hyperlipidemia<-pharma%>%filter(ahf==240692|cdenom %in% hyperlipid)
+#Diabetes drug use: ahf code:682004; 682002;682005;682006;682008;682016;682020;682028;682092
+#major class of diabetes drugs:
+diabete<-pharma%>%filter(cdenom %in% c(thiazolidinediones,sulfonylurees,biguanides,insulin,meglitinides))
+hypertension<-pharma%>%filter(cdenom %in% c(ACEI,ARB,diuretic,alpha_blocker,calcium_channel))
+
+beta_user<-pharma%>%filter(cdenom %in% beta_blocker)
+
+
+
 '%ni%' <- Negate('%in%')
 
 asthma<-pharma%>%filter(cdenom %in% c(theophylline,beta_agonist,cromoglycate) |din %in% asthma_cortico)
-                 
-#use of NSAIDs:
-NASAID<-cdenom%>%filter(grepl(paste0('acétylsalicylique|célécoxib|celecoxib|diclofénac|étodolac|^ibuprofène|',
-                              'flurbiprofène|indométhacine|kétoprofène|méfénamique|méloxicam|nabumétone|',
-                              'nabumetone|naproxène|naproxene|piroxicam|sulindac|tenoxicam|tiaprofénique'),Description))%>%
-                 distinct(code)%>%pull()
 
 nasaid<-pharma%>%filter(cdenom %in% NASAID)
 
@@ -128,8 +128,8 @@ HF<-pharma%>%filter(din==lanoxin|cdenom %in% c(ACEI,diuretic))
 
 
 #export files to work on desktop:
-objects <- list(asthma,beta_user,diabete,hypertension,nasaid,statin_user,HF,hyperlipidemia)
-names(objects)<-c('asthma','beta_user','diabete','hypertension','nasaid','statin_user','HF_med','hyperlipidemia')
+objects <- list(asthma,beta_user,diabete,hypertension,nasaid,statin_user,HF,hyperlipidemia,pvd)
+names(objects)<-c('asthma','beta_user','diabete','hypertension','nasaid','statin_user','HF_med','hyperlipidemia','pvd')
 for (i in 1:length(objects)){
   filename = paste0('~/RAMQ_drug/',names(objects)[i], ".RData")
   saveRDS(objects[[i]], filename)

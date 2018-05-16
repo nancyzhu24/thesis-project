@@ -1,7 +1,7 @@
 ---
-title: "Case control-exclude prevalent cases"
+title: "Competing risk anslysis-2"
 author: "Nancy"
-date: "April 30, 2018"
+date: "May 2, 2018"
 output: 
   html_document:
     code_folding: hide
@@ -19,15 +19,17 @@ library(pacman)
 p_load(tidyverse,data.table,gridExtra,tableone,survival,magrittr)
 
 
-ramq_cc<-readRDS('ramq_cc365.RData')
+ramq_cc<-readRDS('ramq_cc_as_death2.RData')
 ramq_cc$status<-factor(ramq_cc$status,levels=c(0,1),labels=c(0,1))
 ```
 #### Case Definition:
-Cases were defined as 
+Cases were defined as a composite of 
 
-1.having an AS diagnostic code or a surgical valve replacement after cohort entry (inpatient data)
+1.having an AS diagnostic code or a surgical valve replacement after cohort entry
 
-at least **365 days** after cohort entry
+2.death of all cause between cohort entry date and 2011-03-31
+
+This analysis aimed to check competing risk, taking into account of death of all cause.Since the cause of death was not accurately documented in the death registry, this sensitivity analysis aimed to assess the effect of missed cases from death due to AS. 
 
 
 #### Check matching algorithm {.tabset}
@@ -107,6 +109,11 @@ paste0('Number of individuals from exposure set with 0 quantite and duree:',nrow
 
 exposure<-exposure%>%filter(dt_serv>=tentry_date & dt_serv<=texit_date,
                             quantite>0)
+
+
+
+#exposure<-exposure%>%filter(dt_serv<=texit_date,
+#                            quantite>0)
 ```
 
 ```{r}
@@ -149,7 +156,7 @@ tb
 #####Distribution of cumulative exposure time between cases and controls
 ```{r,warning=F,fig.height=4,fig.width=6}
 ggplot(ramq_cc_exposure,aes(x=total_dur,fill=status,color=status))+geom_histogram(binwidth=20,alpha=0.3)+
-  xlab('cumulative duration of exposure during follow-up (Days)')+scale_y_continuous(limits=c(0,400))
+  xlab('cumulative duration of exposure during follow-up (Days)')
 tapply(ramq_cc_exposure$total_dur,ramq_cc_exposure$status,summary)
 ```
 
@@ -162,7 +169,7 @@ Is that because they start drug close to exit_date?
 #total_time: defined as last(dt_serv)-first(dtserv)
 #overlaying both graph to see if there are many individuals who continued prescription after case definition:
 ggplot(data=ramq_cc_exposure,aes(x=start_to_exit,fill=status,color=status))+geom_histogram(binwidth=30,alpha=0.3)+
-  xlab('Start of first prescription to exit_date (Days)')+ggtitle('Whole case-control cohort')+scale_y_continuous(limits=c(0,300))
+  xlab('Start of first prescription to exit_date (Days)')+ggtitle('Whole case-control cohort')
 
 ggplot(data=exposure_time,aes(x=start_to_exit))+geom_histogram(bins=25,alpha=0.2)+ggtitle('Exposed individuals')+scale_x_continuous(breaks=c(0,1000,1500))
  
@@ -226,8 +233,6 @@ rownames(tb3)<-c('No exposure','Exposure')
 tb3
 round(prop.table(tb3,2)[2,],4)
 ```
-
-#### Define exposure with recency:
 ```{r}
 #define exposure 2 with current user or not:
 #current user defined as the gap between the end of last prescription and cohort exit date is less
@@ -272,7 +277,7 @@ CreateTableOne(variables,'status',ramq_cc,factorVars =factor_vars )
 ramq_cc$status<-as.numeric(ramq_cc$status)
 ramq_cc$pair<-rleid(ramq_cc$caseid)
 ramq_cc$exposure<-ramq_cc_exposure$exposure
-model<-clogit(data=ramq_cc,status~exposure+sexe+diabete_combined+ckd_combined+hypertension_combined+pvd_combined+copd_combined+hyperlipidemia_combined+hf_combined+charlson+statin+strata(pair))
+model<-clogit(data=ramq_cc,status~exposure+sexe+diabete_combined+ckd_combined+hypertension_combined+pvd_combined+copd_combined+hyperlipidemia_combined+hf_combined+statin+strata(pair))
 
 summary(model)
 
@@ -282,7 +287,7 @@ model_unadj<-clogit(data=ramq_cc,status~exposure+strata(pair))
 summary(model_unadj)
 ```
 
-```{r,echo=F}
+```{r,eval=F}
 #test for colinearity with VIF test from caret package:
 library(car)
 
@@ -302,10 +307,15 @@ forward<-step(model.null,scope=list(lower=model.null,upper=model.full),
                direction='forward',trace=0)
 
 summary(forward)
+
 vif(forward)
+
 
 ```
 
+After model selection: hypertension, pvd, hyperlipidemia were dropped from the model
+
+With Reduced model: the adjusted OR is 1.21 with 95% CI (1.10,1.33), not changed much from full model
 
 
 #### Other models
@@ -314,7 +324,7 @@ The current users are defined as individuals whose last LTRA prescription ends 7
 
 ```{r}
 ramq_cc$exposure2<-ramq_cc_exposure$exposure2
-model2<-clogit(data=ramq_cc,status~exposure2+sexe+diabete_combined+ckd_combined+hypertension_combined+pvd_combined+copd_combined+hyperlipidemia_combined+hf_combined+charlson+statin+strata(pair))
+model2<-clogit(data=ramq_cc,status~exposure2+sexe+diabete_combined+ckd_combined+hypertension_combined+pvd_combined+copd_combined+hyperlipidemia_combined+hf_combined+charlson+strata(pair))
 
 summary(model2)
 ```
@@ -329,6 +339,7 @@ Now let's define exposure as individuals who are both current users and have at 
 
 ```{r}
 ramq_cc$exposure3<-as.factor(ifelse(ramq_cc$exposure==1 & ramq_cc$exposure2==1,1,0))
+
 table(ramq_cc$exposure3,ramq_cc$status)
 model3<-clogit(data=ramq_cc,status~exposure3+sexe+diabete_combined+ckd_combined+hypertension_combined+pvd_combined+copd_combined+hyperlipidemia_combined+hf_combined+charlson+statin+strata(pair))
 

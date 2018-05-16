@@ -90,33 +90,6 @@ paste('Number of cases with previous other conditions:',length(unique(exclusion2
 #exclude the nam from merged_tb
 case_final<-anti_join(merged_tb,exclusion2[,'nam'])
 
-##########################################################################
-#investigate individuals with only intervention code but no diagnostic code:
-test<-case_final%>%filter(is.na(dtsort))
-
-#816 cases only has intervention code but not diagnosis of AS.
-#check whether those individuals had a CABG procedure as well at around the same time:
-test_interv<-me_interv%>%filter(nam %in% test$nam)%>%count(code_interv)%>%arrange(desc(n))
-
-#separate individuals with a CABG 1IJ76 procedure:
-as_cabg_code<-c('1IJ76LA','1HV90LA','1HV80LA','1HV90WJ','1HV90ST','1HV80GP','1HV80ST','1HV90GP')
-as_cabg<-me_interv%>%filter(nam %in% test$nam,code_interv %in% as_cabg_code )
-#select individuals without CABG procedure for further investigation:
-as_cabg_subset<-as_cabg%>%mutate(CABG=ifelse(code_interv=='1IJ76LA',1,0))%>%
-                          group_by(nam)%>%
-                          filter(sum(CABG)<1)%>%
-                          ungroup()
-
-#228 individuals without CABG intervention
-#check how many of those has no billing code:
-as_cabg_subset%<>%left_join(bill2)
-sum(is.na(as_cabg_subset$bill_code))
-#in 228 individual: 23 miss billing code as well:
-me_interv%>%filter(nam%in%unique(as_cabg_subset$nam))%>%count(code_interv)%>%arrange(desc(n))
-
-#### Record the nams, in case we want to remove them from case
-##########################################################################################################
-
 #find the time of entry and time of exit (first case definition) from follow-up:
 #clean case_final table for SAS matching algorithm:
 case_final<-case_final%>%
@@ -135,8 +108,12 @@ case_final<-left_join(case_final,demo[,c(1,2)])%>%select(-dt_interv,-dtsort)
 summary(case_final)
 
 #extract nam from demo for non_case=total-cases-excluded individuals
+write.csv(case_final,'C:/Users/Nancy Zhu/OneDrive - McGill University/Code for thesis/case_final.csv',row.names=F)
+
+
+#form base cohort: exclude previous diagnosis and other conditions (from both in-patient and out-patient record)
 non_case<-demo%>%filter(nam %ni% unique(c(case_final$nam,exclusion2$nam,exclusion1)))%>%
-          dplyr::rename(entry_date=dt_index)
+  dplyr::rename(entry_date=dt_index)
 
 #link to sejour data to figure out the exit date: Death or Mar 31 2011:
 
@@ -154,15 +131,13 @@ non_case<-left_join(non_case,sejour[,c('no_seq','nam','dtadm','dtsort','typ_dece
 #some of them might be late entryee and only had record after 2011-03-31(sejour cut off at 2011-03-31)
 
 no_sejour<-non_case%>%filter(is.na(dtsort))
-#many of them do have bill history, maybe missing data in diagnostic problem?
+#many of them do have bill history, maybe just no hospitalization?
 #might have prescription data as well, keep those in the cohort.
 
 #should you remove 2792 individuals?
 #non_case%<>%filter(!is.na(dtsort))
 
-#reassign the exit_date to 2011-03-31 or death date if smaller than 2011-03-31:
-#first assign date if death
-#then assign any date after 2011-06-30 to 2011-06-30
+#exit date was defined as either death( death during hospitalization), study end date:
 non_case<-non_case%>%mutate(exit_date_0=if_else(is.na(typ_deces),ymd('2011-03-31'),dtsort))%>%
                      group_by(nam)%>%
                      mutate(exit_date=min(exit_date_0))%>%
@@ -170,6 +145,7 @@ non_case<-non_case%>%mutate(exit_date_0=if_else(is.na(typ_deces),ymd('2011-03-31
                      select(nam,age,entry_date,exit_date)%>%
                      distinct()
 non_case$case<-0
+
 #check if any mistake where last dtsort < entry date:
 mistake<-non_case%>%filter(exit_date<entry_date)
 #remove those 2 individuals, died right after entry
@@ -178,15 +154,22 @@ non_case%<>%filter(nam %ni% mistake$nam)
 #check percentage of death: (consider competing risk factor)
 #non_case$death<-as.factor(ifelse(non_case$exit_date!='2011-03-31',1,0))
 
-
-
-
 complete_set<-bind_rows(non_case,case_final)
 
 
 
-write.csv(case_final,'C:/Users/Nancy Zhu/OneDrive - McGill University/Code for thesis/case_final.csv',row.names=F)
-write.csv(complete_set,'C:/Users/Nancy Zhu/OneDrive - McGill University/Code for thesis/complete_set2.csv',row.names=F)
+
+#link with death registry for death outside hospitalization:
+deces<-readRDS('../RData files/deces.RData')
+complete_set<-read.csv('C:/Users/Nancy Zhu/OneDrive - McGill University/Code for thesis/Case_control_files/complete_set_short.csv',stringsAsFactors = F)
+complete_set$case[is.na(complete_set$case)]<-0
+complete_set[,c('entry_date','exit_date')]<-lapply(complete_set[,c('entry_date','exit_date')],ymd)
+complete_set<-left_join(complete_set,deces)
+complete_set$exit_date<-pmin(complete_set$exit_date,complete_set$Dt_dec,na.rm=T)
+complete_set%<>%select(-Dt_dec)
+#complete set for cases with billing code and cencoring including moving out of province
+write.csv(complete_set,'C:/Users/Nancy Zhu/OneDrive - McGill University/Code for thesis/Case_control_files/complete_set_short.csv',row.names=F)
+
 
 # summary(complete_set[complete_set$case==0,]$length)
 # summary(complete_set[complete_set$case==1,]$length)
@@ -201,11 +184,70 @@ ramq_cc<-fread('C:/Users/Nancy Zhu/OneDrive - McGill University/Code for thesis/
 case_to_exclude<-ramq_cc%>%group_by(caseid)%>%filter(n()<11)
 
 paste('number of cases with less than 10 controls:',length(unique(case_to_exclude$caseid)))
-#11 cases excluded
+#12 cases excluded
 
 #quick check age and follow-up time in each group:
 ramq_cc<-ramq_cc%>%filter(caseid %ni% case_to_exclude$caseid)
 ramq_cc%>%group_by(status)%>%summarise(mean_age=mean(tageind),mean_fup=mean(tfu),size=n())
 
 rm(merged_tb,non_case,complete_set,case1,case_final,exclusion1,exclusion2,interv_cci,case_to_exclude)
-  
+
+
+##########################################################################
+#investigate individuals with only intervention code but no diagnostic code:
+test<-case_final%>%filter(is.na(dtsort))
+
+#816 cases only has intervention code but not diagnosis of AS.
+#check whether those individuals had a CABG procedure as well at around the same time:
+test_interv<-me_interv%>%filter(nam %in% test$nam)%>%count(code_interv)%>%arrange(desc(n))
+
+#separate individuals with a CABG 1IJ76 procedure:
+as_cabg_code<-c('1IJ76LA','1HV90LA','1HV80LA','1HV90WJ','1HV90ST','1HV80GP','1HV80ST','1HV90GP')
+as_cabg<-me_interv%>%filter(nam %in% test$nam,code_interv %in% as_cabg_code )
+#select individuals without CABG procedure for further investigation:
+as_cabg_subset<-as_cabg%>%mutate(CABG=ifelse(code_interv=='1IJ76LA',1,0))%>%
+  group_by(nam)%>%
+  filter(sum(CABG)<1)%>%
+  ungroup()
+
+#228 individuals without CABG intervention
+#check how many of those has no billing code:
+as_cabg_subset%<>%left_join(bill2)
+sum(is.na(as_cabg_subset$bill_code))
+#in 228 individual: 23 miss billing code as well:
+me_interv%>%filter(nam%in%unique(as_cabg_subset$nam))%>%count(code_interv)%>%arrange(desc(n))
+
+#### Record the nams, in case we want to remove them from case
+##########################################################################################################
+
+
+
+
+############################################################################################################
+#plot number of cases over time with diagnosed cases in line chart and surgery cases in histogram:
+#count of diagnosed cases:
+
+a<-case_final%>%select(dtsort,diag)%>%
+  filter(!is.na(dtsort))%>%
+  group_by(year(dtsort))%>%
+  summarise(n_diag=n())
+
+b<-case_final%>%select(dt_interv)%>%
+  filter(!is.na(dt_interv))%>%
+  group_by(year(dt_interv))%>%
+  summarise(n=n())
+
+c<-left_join(a,b,by=c('year(dtsort)'='year(dt_interv)'))
+
+c%<>%filter(`year(dtsort)`!=2011)
+
+ggplot(data=c)+
+  geom_line(aes(x=`year(dtsort)`,y=n_diag,color='steelblue4'),size=1)+
+  geom_histogram(aes(x=`year(dtsort)`,y=n,fill='steelblue4'),stat='identity',color='white')+
+  scale_x_continuous(breaks=unique(c$`year(dtsort)`))+
+  labs(x='Year',y='',title='Number of diagnosed AS cases and \n surgical valve replacement',
+       subtitle='between 2001-2010 across Quebec')+
+  scale_colour_manual(name ='', values =c('steelblue4'='steelblue4'), labels = c('Diagnosis'))+
+  scale_fill_manual(name ='', values =c('steelblue4'='steelblue4'), labels = c('Surgery'))+
+  theme_minimal()
+############################################################################################################3

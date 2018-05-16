@@ -1,5 +1,5 @@
 library(tableone)
-library(lubridate)
+
 
 #'table 1' description: match back to demo information for gender, other confounder description data:
 ramq_cc%<>%left_join(demo[,c(1,3)],by=c('id'='nam'))
@@ -9,6 +9,13 @@ ramq_cc[,date_factor]<-lapply(ramq_cc[,date_factor],ymd)
 
 
 prop.table(table(ramq_cc$sexe,ramq_cc$status),2)
+
+
+ramq_cc<-diagnostic(ramq_cc,ICD,me_diag)
+
+#function to ascertain covariate with diagnostic code (in-patient)
+
+diagnostic<-function(ramq_cc,ICD,me_diag){
 
 #'From inpatient-diagnostic and intervention table find the ICD10 code for the following:
 dyslipidemia<-c('^272\\d{,2}')
@@ -89,7 +96,12 @@ select_col<-c('dyslipidemia','diabete','CKD','hypertension','COPD','CAD','periph
 ramq_cc[,select_col]<-lapply(ramq_cc[,select_col],function(x){x<-ifelse(is.na(x),0,x)})
 ramq_cc[,select_col]<-lapply(ramq_cc[,select_col],as.factor)
 
-rm(diag_status,diag_subset,icd9_list,code)
+#rm(diag_status,diag_subset,icd9_list,code)
+return(ramq_cc)
+}
+
+
+
 #create tableone for descriptive analysis:
 variables<-c('tageind','tfu','sexe','dyslipidemia','diabete','CKD','hypertension','COPD','CAD','peripheral','HF')
 factor_vars<-c('sexe','dyslipidemia','diabete','CKD','hypertension','COPD','CAD','peripheral','HF')

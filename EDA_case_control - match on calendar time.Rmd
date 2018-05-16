@@ -1,7 +1,7 @@
 ---
-title: "Case control-exclude prevalent cases"
+title: "EDA case control cohort-match on calendar year of entry and follow-up time"
 author: "Nancy"
-date: "April 30, 2018"
+date: "May 1, 2018"
 output: 
   html_document:
     code_folding: hide
@@ -16,18 +16,19 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(pacman)
-p_load(tidyverse,data.table,gridExtra,tableone,survival,magrittr)
+p_load(tidyverse,data.table,gridExtra,tableone,survival,magrittr,knitr)
 
 
-ramq_cc<-readRDS('ramq_cc365.RData')
+ramq_cc<-readRDS('ramq_cc_match_year.RData')
 ramq_cc$status<-factor(ramq_cc$status,levels=c(0,1),labels=c(0,1))
 ```
 #### Case Definition:
-Cases were defined as 
+Cases were defined by meeting one of the following two criterias after cohort entry date:
+1. had an AS diagnostic code from hospitalization data
+2. had surgical valve replacement from medical service during hospitalization
 
-1.having an AS diagnostic code or a surgical valve replacement after cohort entry (inpatient data)
 
-at least **365 days** after cohort entry
+*Controls were matched on calendar year and follow-up time(+/-30 days)* This sensitivity analysis aimed to address the issue of over-sampling in year 2010 due to short case follow-up time. (Details see report on 'EDA on follow-up time in cases'). 
 
 
 #### Check matching algorithm {.tabset}
@@ -71,6 +72,7 @@ ggplot(data=subset(ramq_cc,status==1),aes(x=year(texit_date)))+
 #### Percent of cases sampled as controls:
 ```{r}
 control_to_case<-round(100*sum(ramq_cc$tcase==1&ramq_cc$status==0)/sum(ramq_cc$status==0),2)
+#control_to_case<-round(100*sum(ramq_cc$tcase==1&ramq_cc$status==0)/sum(ramq_cc$status==0),2)
 paste('Percent of cases sampled as control in Control group:',control_to_case)
 
 paste('Number of unique cases sampled as control:',ramq_cc%>%filter(tcase==1&status==0)%>%summarise(n=n_distinct(id)))
@@ -78,9 +80,10 @@ paste('Number of unique cases sampled as control:',ramq_cc%>%filter(tcase==1&sta
 a<-semi_join(ramq_cc[,c('id','tfu')],ramq_cc%>%filter(tcase==1&status==0)%>%
                         distinct(id,tfu))
 paste('The Average follow-up time for those cases in the Control group:',round(a%>%summarise(mean=mean(tfu)),2))
+
 ```
 
-From the result, about `r control_to_case` percent of the controls became cases at a later time point after being sampled as control. Also, a high proportion of cases were sampled as control. Therefore, there is a high degree of similarity between case and control groups in this study.
+From the result, about `r control_to_case` percent the controls became cases at a later time point after being sampled as control.Also, a high proportion of cases were sampled as control. Therefore, there is a high degree of similarity between case and control groups in this study.
 
 #### Exposure pattern between case and control
 ```{r}
@@ -148,8 +151,8 @@ tb
 ```
 #####Distribution of cumulative exposure time between cases and controls
 ```{r,warning=F,fig.height=4,fig.width=6}
-ggplot(ramq_cc_exposure,aes(x=total_dur,fill=status,color=status))+geom_histogram(binwidth=20,alpha=0.3)+
-  xlab('cumulative duration of exposure during follow-up (Days)')+scale_y_continuous(limits=c(0,400))
+ggplot(ramq_cc_exposure,aes(x=total_dur,fill=status,color=status))+geom_histogram(binwidth=30,alpha=0.3)+
+  xlab('cumulative duration of exposure during follow-up (Days)')+scale_y_continuous(limits=c(0,250))
 tapply(ramq_cc_exposure$total_dur,ramq_cc_exposure$status,summary)
 ```
 
@@ -173,7 +176,7 @@ tapply(ramq_cc_exposure$start_to_exit,ramq_cc_exposure$status,summary)
 #### Distribution of time from end of last prescription to exit date in cases and controls:
 ```{r,warning=F,fig.height=4,fig.width=6}
 ggplot(ramq_cc_exposure,aes(x=recency,fill=status,color=status))+geom_histogram(bins=25,alpha=0.3)+
-  xlab('End of last prescription to exit_date (Days)')+scale_y_continuous(limits=c(0,1200))
+  xlab('End of last prescription to exit_date (Days)')+scale_y_continuous(limits=c(0,1000))
 ```
 
 A majority of cases either were still taking the drug at the time becoming a case or stopped taking the drug within short period of time before.
@@ -264,7 +267,10 @@ factor_vars<-c('sexe','dyslipidemia','diabete','CKD','hypertension','COPD','CAD'
                'beta_agonist','inhaled_corti','ACE_ARB','diuretic','alpha_blocker','calcium_channel',
                'thiazolidinediones','sulfonylure','biguanide','insulin','statin','nasaid','beta_blocker')
 
-CreateTableOne(variables,'status',ramq_cc,factorVars =factor_vars )
+a<-data.frame(print(CreateTableOne(variables,'status',ramq_cc,factorVars =factor_vars )))
+a<-a[,1:3]
+colnames(a)<-c('control','case','p test')
+knitr::kable(a)
 ```
 
 #### Conditional logistic model
@@ -272,40 +278,14 @@ CreateTableOne(variables,'status',ramq_cc,factorVars =factor_vars )
 ramq_cc$status<-as.numeric(ramq_cc$status)
 ramq_cc$pair<-rleid(ramq_cc$caseid)
 ramq_cc$exposure<-ramq_cc_exposure$exposure
-model<-clogit(data=ramq_cc,status~exposure+sexe+diabete_combined+ckd_combined+hypertension_combined+pvd_combined+copd_combined+hyperlipidemia_combined+hf_combined+charlson+statin+strata(pair))
+model<-clogit(data=ramq_cc,status~exposure+tageind+sexe+diabete_combined+ckd_combined+hypertension_combined+pvd_combined+copd_combined+hyperlipidemia_combined+hf_combined+statin+charlson+strata(pair))
 
 summary(model)
 
 
-#calculate unadjusted OR:
 model_unadj<-clogit(data=ramq_cc,status~exposure+strata(pair))
 summary(model_unadj)
 ```
-
-```{r,echo=F}
-#test for colinearity with VIF test from caret package:
-library(car)
-
-
-
-#model selection:
-model.null<-clogit(data=ramq_cc,status~exposure+strata(pair))
-model.full<-clogit(data=ramq_cc,status~exposure+sexe+diabete_combined+ckd_combined+hypertension_combined+pvd_combined+copd_combined+hyperlipidemia_combined+hf_combined+charlson+statin+strata(pair))
-
-library(MASS)
-#backward selection AIC:
-backward<-stepAIC(model.full,direction='backward',trace=0)
-summary(backward)
-
-#forward selection AIC
-forward<-step(model.null,scope=list(lower=model.null,upper=model.full),
-               direction='forward',trace=0)
-
-summary(forward)
-vif(forward)
-
-```
-
 
 
 #### Other models
