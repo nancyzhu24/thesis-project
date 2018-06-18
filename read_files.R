@@ -2,7 +2,7 @@ library(pacman)
 p_load(dplyr,ggplot2,tidyr,stringr,xlsx,magrittr,data.table,lubridate)
 
 
-directory<-'E:/'
+directory<-'E:/thesis_data/'
 demo_filepath<-paste0(directory,'demo.csv')
 interv_filepath<-paste0(directory,'me_interv.csv')
 diag_filepath<-paste0(directory,'me_diag.csv')

@@ -90,6 +90,35 @@ paste('Number of cases with previous other conditions:',length(unique(exclusion2
 #exclude the nam from merged_tb
 case_final<-anti_join(merged_tb,exclusion2[,'nam'])
 
+
+############################################################################################################
+#plot number of cases over time with diagnosed cases in line chart and surgery cases in histogram:
+#count of diagnosed cases:
+
+a<-case_final%>%select(dtsort,diag)%>%
+  filter(!is.na(dtsort))%>%
+  group_by(year(dtsort))%>%
+  summarise(n_diag=n())
+
+b<-case_final%>%select(dt_interv)%>%
+  filter(!is.na(dt_interv))%>%
+  group_by(year(dt_interv))%>%
+  summarise(n=n())
+
+c<-left_join(a,b,by=c('year(dtsort)'='year(dt_interv)'))
+
+c%<>%filter(`year(dtsort)`!=2011)
+
+ggplot(data=c)+
+  geom_line(aes(x=`year(dtsort)`,y=n_diag,color='steelblue4'),size=1)+
+  geom_histogram(aes(x=`year(dtsort)`,y=n,fill='steelblue4'),stat='identity',color='white')+
+  scale_x_continuous(breaks=unique(c$`year(dtsort)`))+
+  labs(x='Year',y='',title='Number of diagnosed AS cases and \n surgical valve replacement',
+       subtitle='between 2001-2010 across Quebec')+
+  scale_colour_manual(name ='', values =c('steelblue4'='steelblue4'), labels = c('Diagnosis'))+
+  scale_fill_manual(name ='', values =c('steelblue4'='steelblue4'), labels = c('Surgery'))+
+  theme_minimal()
+############################################################################################################3
 #find the time of entry and time of exit (first case definition) from follow-up:
 #clean case_final table for SAS matching algorithm:
 case_final<-case_final%>%
@@ -223,31 +252,3 @@ me_interv%>%filter(nam%in%unique(as_cabg_subset$nam))%>%count(code_interv)%>%arr
 
 
 
-############################################################################################################
-#plot number of cases over time with diagnosed cases in line chart and surgery cases in histogram:
-#count of diagnosed cases:
-
-a<-case_final%>%select(dtsort,diag)%>%
-  filter(!is.na(dtsort))%>%
-  group_by(year(dtsort))%>%
-  summarise(n_diag=n())
-
-b<-case_final%>%select(dt_interv)%>%
-  filter(!is.na(dt_interv))%>%
-  group_by(year(dt_interv))%>%
-  summarise(n=n())
-
-c<-left_join(a,b,by=c('year(dtsort)'='year(dt_interv)'))
-
-c%<>%filter(`year(dtsort)`!=2011)
-
-ggplot(data=c)+
-  geom_line(aes(x=`year(dtsort)`,y=n_diag,color='steelblue4'),size=1)+
-  geom_histogram(aes(x=`year(dtsort)`,y=n,fill='steelblue4'),stat='identity',color='white')+
-  scale_x_continuous(breaks=unique(c$`year(dtsort)`))+
-  labs(x='Year',y='',title='Number of diagnosed AS cases and \n surgical valve replacement',
-       subtitle='between 2001-2010 across Quebec')+
-  scale_colour_manual(name ='', values =c('steelblue4'='steelblue4'), labels = c('Diagnosis'))+
-  scale_fill_manual(name ='', values =c('steelblue4'='steelblue4'), labels = c('Surgery'))+
-  theme_minimal()
-############################################################################################################3
