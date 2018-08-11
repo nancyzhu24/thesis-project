@@ -4,9 +4,9 @@ lapply(package,require,character.only=T)
 
 
 #load data
-file<-list.files(path='E:/')
-filename<-list.files(path='E:/',pattern='^bill_\\d{4}')
-filepath<-paste0('E:/',filename)
+file<-list.files(path='E:/thesis_data')
+filename<-list.files(path='E:/thesis_data',pattern='^bill_\\d{4}')
+filepath<-paste0('E:/thesis_data/',filename)
 
 bill<-list()
 for (i in 1:12){
@@ -22,21 +22,20 @@ names(bill)<-filename[1:12]
 ########################################################################################################
 #filter code_act for AS surgical interventions to look at case numbers: (Comparing with hospitalization data for verification)
 AS_bill_code<-c(4547,4548,4542,4543,4546,4544)
-bill<-lapply(bill,function(x)x[x$code_act %in% AS_bill_code,])
+bill_savr<-lapply(bill,function(x)x[x$code_act %in% AS_bill_code,])
 
-bill<-do.call(rbind,bill)
-length(unique(bill$nam))
+bill_savr<-do.call(rbind,bill_savr)
+length(unique(bill_savr$nam))
 #12792 unique individuals
 
-lapply(bill,function(x)sum(is.na(x))) #no missing values
+lapply(bill_savr,function(x)sum(is.na(x))) #no missing values
 
 #link bill to index_age in demo (filtered by age) dataset by nam:
-bill2<-left_join(bill,demo[,c('nam','dt_index','age','sexe')])%>%
+bill_savr<-left_join(bill_savr,demo[,c('nam','dt_index','age','sexe')])%>%
       filter(!is.na(dt_index))%>%
       mutate(dt_serv=as.Date(dt_serv,origin='1960-01-01'))%>%
       distinct() #remove duplicated rows
 
-length(unique(bill$nam))
 
 #link icd code in bill2 to ICD table:
 bill_icd<-unique(c(ICD$Description.CIM10.CA..Français[ICD$CIM9.Stand %in% unique(bill2$diag)],

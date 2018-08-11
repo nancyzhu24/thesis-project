@@ -1,12 +1,12 @@
 #this file was used to ascertain covariates status from prescription data:
 objects <- vector(mode='list',length=7)
-files<-c('asthma','beta_user','diabete','hypertension','nasaid','statin_user','pvd')
+files<-c('asthma','beta_user','diabete','hypertension','nasaid','statin_user','pvd','hyperlipidemia','HF_med')
 filename<-paste0('../RData files/',files, ".RData")
 for (i in seq_along(files)){
   objects[[i]]<-readRDS(filename[i])
 }
 
-names(objects)<-c('asthma','beta_blocker','diabete','hypertension','nasaid','statin','pvd')
+names(objects)<-c('asthma','beta_blocker','diabete','hypertension','nasaid','statin','pvd','hyperlipidemia','HF_med')
 
 #select individuals with prescription history before cohort entry:
 #remove prescription record with 0 quantite input
@@ -70,6 +70,19 @@ factors<-c('theophylline','beta_agonist','inhaled_corti','ACE_ARB','diuretic','a
            'sulfonylure','biguanide','statin','nasaid','beta_blocker','insulin')
 ramq_cc[,factors]<-lapply(ramq_cc[,factors],as.factor)
 
+#add hyperlipidemia column to indicate individual taking hyperlipidemia(excluding statin) medication:
+
+ramq_cc$hyperlipidemia_med<-as.factor(ifelse(ramq_cc$id %in% unique(objects[[8]]$nam),1,0))
+
+lanoxin<-objects[[9]]%>%filter(cdenom==2847)%>%distinct(nam)
+ACEI<-objects[[9]]%>%filter(cdenom %in% ACEI)%>%distinct(nam)
+
+ramq_cc$lanoxin<-ifelse(ramq_cc$id %in% lanoxin$nam,1,0)
+ramq_cc$acei<-ifelse(ramq_cc$id %in% ACEI$nam,1,0)
+
+ramq_cc$diuretic<-as.numeric(ramq_cc$diuretic)
+ramq_cc$hf_med<-ramq_cc$diuretic+ramq_cc$lanoxin+ramq_cc$acei
+
 #rm(object2)
 
 return(ramq_cc)
@@ -88,29 +101,7 @@ rm(theophylline,beta_agonist,inhaled_corti,cromoglycate,ACE_ARB,Diuretic,alpha_b
 # CreateTableOne(variables,'status',ramq_cc,factorVars =factor_vars )
 
 
-#add hyperlipidemia column to indicate individual taking hyperlipidemia(excluding statin) medication:
-hyperlipidemia<-readRDS('../RData files/hyperlipidemia.RData')
-hyperlipidemia<-hyperlipidemia%>%
-  left_join(distinct(ramq_cc,id,tentry_date),by=c('nam'='id'))%>%
-  filter(dt_serv<tentry_date)
 
-
-ramq_cc$hyperlipidemia_med<-as.factor(ifelse(ramq_cc$id %in% unique(hyperlipidemia$nam),1,0))
-
-
-#add HF medication:
-HF<-readRDS('../RData files/HF_med.RData')%>%
-  left_join(distinct(ramq_cc,id,tentry_date),by=c('nam'='id'))%>%
-  filter(dt_serv<tentry_date)
-
-lanoxin<-HF%>%filter(cdenom==2847)%>%distinct(nam)
-ACEI<-HF%>%filter(cdenom %in% ACEI)%>%distinct(nam)
-
-ramq_cc$lanoxin<-ifelse(ramq_cc$id %in% lanoxin$nam,1,0)
-ramq_cc$acei<-ifelse(ramq_cc$id %in% ACEI$nam,1,0)
-
-ramq_cc$diuretic<-as.numeric(ramq_cc$diuretic)
-ramq_cc$hf_med<-ramq_cc$diuretic+ramq_cc$lanoxin+ramq_cc$acei
 
 
 #saveRDS(ramq_cc,'ramq_cc.RData')
