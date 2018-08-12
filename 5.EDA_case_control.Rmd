@@ -19,7 +19,7 @@ library(pacman)
 p_load(tidyverse,data.table,gridExtra,tableone,survival,magrittr)
 
 
-ramq_cc<-readRDS('ramq_cc365.RData')
+ramq_cc<-readRDS('ramq_cc.RData')
 ramq_cc$status<-factor(ramq_cc$status,levels=c(0,1),labels=c(0,1))
 ```
 #### Case Definition:
@@ -181,11 +181,9 @@ A majority of cases either were still taking the drug at the time becoming a cas
 ##### Distribution of first and last year of exposure:
 ```{r}
 #confirm with year of first prescription: (from exposure data)
-exposure_date<-exposure%>%group_by(nam)%>%mutate(first=min(dt_serv),
-                                                 last=max(dt_serv))%>%
-                                          ungroup()%>%
-                                          distinct(nam,first,last)
-
+exposure_date<-exposure%>%group_by(nam)%>%summarise(first=min(dt_serv),
+                                                 last=max(dt_serv))
+                                         
 ```
 
 ```{r,fig.height=4,fig.width=10}
