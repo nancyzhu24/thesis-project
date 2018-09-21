@@ -28,6 +28,7 @@ Once the study cohort was created, covariates predefined in the study protocol w
 1. [EDA_case_control.Rmd](https://github.com/nancyzhu24/thesis-project/blob/master/5.EDA_case_control.Rmd) is a Rmarkdown files which serves as a template for exploratory data analysis and regression model analysis for the main analysis and some sensitivity analysis. The reports generated from this Rmarkdown files includes descriptive analysis of the study cohort and results from conditional logistic regression model. Notice, script for exposure definition were also included in this Rmarkdown file.
 
 **Sensitivity analysis**
+
 For the thesis project, a number of sensitivity analysis were conducted to test the robustness of the study result.
 
 -*Sensitivity analysis 1*: in the analysis, case definition was altered to include information from physician billing code (ie outpatient visit were taken into consideration to define cases)
