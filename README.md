@@ -30,25 +30,25 @@ Once the study cohort was created, covariates predefined in the study protocol w
 **Sensitivity analysis**
 For the thesis project, a number of sensitivity analysis were conducted to test the robustness of the study result.
 
-*Sensitivity analysis 1*: in the analysis, case definition was altered to include information from physician billing code (ie outpatient visit were taken into consideration to define cases)
+-*Sensitivity analysis 1*: in the analysis, case definition was altered to include information from physician billing code (ie outpatient visit were taken into consideration to define cases)
 
 [load_billing_data.R](https://github.com/nancyzhu24/thesis-project/blob/master/load_billing_data.R) reads all physician billing data into R.
 
 Cases were defined from [AS_bill_selection.R](https://github.com/nancyzhu24/thesis-project/blob/master/AS_bill_selection.R)
 All the following data manipulation steps were the same for this analysis
 
-*Sensitivity analysis 2/3*:in this analysis Death due to AS or Death of any cause was included in the case. The goal of this analysis was to capture cases from death due to AS. Since reason of death is not thoroughly reported, to investigate the extend of missing report, another analysis was conducted to include death of all causes.
+-*Sensitivity analysis 2/3*:in this analysis Death due to AS or Death of any cause was included in the case. The goal of this analysis was to capture cases from death due to AS. Since reason of death is not thoroughly reported, to investigate the extend of missing report, another analysis was conducted to include death of all causes.
 
 Death cases were ascertained from the death registry [deces_as.R](https://github.com/nancyzhu24/thesis-project/blob/master/deces_as.R)
 Cases were defined using script [AS&death.R](https://github.com/nancyzhu24/thesis-project/blob/master/AS%26death.R)
 
 For reporting, [Competing_risk_as.Rmd](https://github.com/nancyzhu24/thesis-project/blob/master/Competing_risk_as.Rmd) was used as the template.
 
-*Sensitivity analysis 4*: aortic stenosis features a long period time during which a patient remains asymptomatic. A patient could have developed AS long before being diagnosed. To study the long term effect of LTRAs on AS development, we re-defined cases when they have longer follow-up time
+-*Sensitivity analysis 4*: aortic stenosis features a long period time during which a patient remains asymptomatic. A patient could have developed AS long before being diagnosed. To study the long term effect of LTRAs on AS development, we re-defined cases when they have longer follow-up time
 
 In supplement to case_selection.R, [define_case_by_fu(sensitivity).R](https://github.com/nancyzhu24/thesis-project/blob/master/define_case_by_fu(sensitivity).R) constructs the study cohort for this analysis.
 
-*Sensitivity analysis 5*: From exploratory data analysis from the main analysis, we realized an over-sampling issue with our case-control cohort. Since the source population of the study contains a relatively old population, many of our cases had short follow-up time in the study, thus controls who entered close to study end date were over-sampled to match on study follow-up time.
+-*Sensitivity analysis 5*: From exploratory data analysis from the main analysis, we realized an over-sampling issue with our case-control cohort. Since the source population of the study contains a relatively old population, many of our cases had short follow-up time in the study, thus controls who entered close to study end date were over-sampled to match on study follow-up time.
 
 To study the effect, we conducted another sensitivity analysis where case and controls were matched on study entry year and follow-up time. The case-control matching algorithm can be found [here]() All other data manipulation steps were the same as the main analysis.
 
