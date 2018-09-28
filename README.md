@@ -1,4 +1,4 @@
-# Thesis-project :+1:
+# Thesis-project :smirk:
 
 This repository contains R code written for my thesis project.
 
