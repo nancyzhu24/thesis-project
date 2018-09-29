@@ -1,0 +1,158 @@
+/**Author:  Wenbin Li  Modified by Menglan Pang**/
+/*This macro is developed for matching cases and controls with replacement*/
+
+/* Features:
+1. Individuals are eligible to be controls for more than 1 case; 
+2. Cases are eligible to be controls for another case, 
+    so long as the patient was free of the outcome at the time he/she was selected as a control;
+3. Allows for 1:N matching
+
+ In the first run,select as the controls for the case the first N patients in the risk set;
+ For cases where there are fewer than N patients to serve as controls, select the whole list;
+
+ For cases where there are no patients to serve as controls in the first run,
+ conduct the second run,and widen the matching criterion to avoid losing the case*/
+
+
+***Create cases and controls datasets;
+libname lib "path\...\libname";
+data cohort;
+set lib.cohort;
+caco=0;
+run;
+
+data case;
+set lib.cohort;
+if outcome=1;
+index_date=endfu;
+format index_date date9. ;
+run;
+    
+proc sql;
+   create table case_caco1 as
+   select *, 1 as caco, monotonic() as match_num
+   from case;
+quit;
+
+data _null_;
+   set case_caco1 end=last;
+   if last then call symput('N', match_num);
+run;
+%put &N;
+
+%macro do_first ;
+ %do I =1 %to &N;
+data case_caco1_I;
+   set case_caco1;
+   if  match_num=&I;
+run;
+
+*Matching;
+proc sql;
+   create table risk as
+   select
+          a.ID as case_ID,
+          b.ID as control_ID,
+          a.age as case_age,
+		  b.age as control_age,
+		  a.male as case_male,
+          b.male as control_male,
+          a.t0 as case_t0,
+          b.t0 as control_t0,
+		  a.endfu as case_endfu,
+		  b.endfu as control_endfu,
+		  a.caco as case_caco,
+		  b.caco as control_caco,
+          a.index_date, 
+          a.match_num
+	from case_caco1_I a,
+         cohort b
+    where  a.male=b.male and 
+           abs(a.t0-b.t0)<=90
+           and abs(a.age-b.age)<=2
+           and b.t0<=a.endfu<=b.endfu and  /*NOTE: This condition should be protocol specific, be careful of <= */
+	       not (a.endfu=b.endfu and b.outcome=1);
+quit;
+
+proc append base=risk_set data=risk; run;
+%end;
+
+%mend;
+
+option nonotes;
+%do_first;
+option notes;
+proc sort data=risk_set;
+by case_ID control_ID;
+run;
+data risk_set;
+   set risk_set;
+   rand_num=RANUNI(123);
+   Max_abs_age=2;
+run;
+
+proc sort data=risk_set;
+by case_ID rand_num;
+run;
+
+data check;
+set risk_set;
+if case_id=control_id then flag=1;
+if abs(case_age-control_age)>2 then flag=1;
+if case_male-control_male ne 0 then flag=1;
+if abs(case_t0-control_t0)>90 then flag=1;
+if index_date>control_endfu then flag=1;
+if control_t0>case_endfu then flag=1;
+run;
+proc freq; table flag/missing; run;
+
+
+data cohort_match N_enough;
+   set risk_set ;
+   by case_ID;
+   retain num;
+   if first.case_ID then num=1;
+   if num le 10 then do;         *10 controls for each case, this value should be changed according to protocol;
+     output cohort_match;
+	 num=num+1;
+	 end;
+   if last.case_ID then do;
+     if num le 10 then output N_enough; *10 controls for each case, this value should be changed according to protocol;;
+	 end;
+   run;
+
+*Collect all cases that do not qualify for the first round;
+proc sql;
+   create table no_match as
+   select *
+   from case_caco1     
+   where match_num not in (select match_num from cohort_match);
+quit;
+
+/****** Modify and run the macro for the second time for cases where there are no patients serve as controls , 
+          widen the age matching criterion, for example, from ±2 years to ±5 years ****/
+
+proc sql;
+   create table matched_cases as
+   select *
+   from case_caco1    
+   where match_num in (select match_num from cohort_match)
+   order by match_num;
+
+   create table matched_controls as
+   select cohort.*, match_num,index_date,Max_abs_age,num
+   from cohort, cohort_match
+   where cohort.ID = control_ID 
+   order by match_num, num;        
+quit;
+
+data matched;  
+   set matched_cases
+       matched_controls
+   ;
+   by match_num;
+   drop outcome num;
+run;
+
+
+proc datasets nolist; delete not_enough controls_enough case_caco1_I risk case_caco1 cohort_match matched_cases matched_controls run; quit;

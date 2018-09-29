@@ -1,0 +1,305 @@
+/** This is modified code for identifying a matched case-control cohort using risk-set sampling.
+    The code was originally created for CNODEs project with authors and documentation below  **/
+
+/** Author:  Wenbin Li  Modified by Menglan Pang **/
+/** This macro is developed for matching cases and controls with replacement **/
+
+/** Features:
+              1. Individuals are eligible to be controls for more than 1 case; 
+              2. Cases are eligible to be controls for another case, 
+                 so long as the patient was free of the outcome at the time he/she was selected as a control;
+              3. Allows for 1:N matching
+
+                 In the first run,select as the controls for the case the first N patients in the risk set;
+                 For cases where there are fewer than N patients to serve as controls, select the whole list;
+                 For cases where there are no patients to serve as controls in the first run,
+                 conduct the second run,and widen the matching criterion to avoid losing the case **/
+
+** This code assumes the user has a cohort dataset already created which contain the following:
+              1. A binary outcome variable (0/1)
+              2. A cohort entry date (time 0)
+              3. An end of follow-up date (earliest of some set of criteria (project specific).  Example: earliest of event outcome, death date,
+                 LTC facility entry, or end of study period)
+              4. An ID variable (Example: SCRPHIN)
+              5. All variables to be used to identify the risk set (project specific).  Example:  sex, age, treatment duration. **;
+  
+
+** Macro Parameters:
+              1.  cohort_name = name of cohort dataset (include project. prefix if it a saved dataset)
+              2.  outcome_var = name of binary outcome variable
+              3.  end_fu = end of follow-up date
+              4.  randnum = any random number (seed value)
+              5.  K = maximum number of controls to match to a case
+	      6.  control_index_dt = identifies how index date for control is to be calculated (case_fu, case_event)
+			             case_fu calculates the control to have index date such that the control has the same follow-up time as its matched case (control cohort entry dt + case follow-up duration)
+                                     case_event assigns the value of the matched cases end of follow-up date (the outcome date) to the control
+	      7.  rs_match_where = criteria for risk set matching (will be used in where statement of the SQL for identifying all possible controls within the risk set).  
+			           Note: all cases related variables require the 'a.' alias to identify it is from the cases dataset, and all controls related variables require the 'b.' alias to identify it is
+					 from the controls dataset
+			           Example (same sex, cohort entry (time 0) within 90 days, age within 2 years, case end of followup within followup of control, and not same end of follow-up date where
+					   the control ends on the outcome date):  a.male = b.male and 
+                                            					   abs(a.t0 - b.t0) <= 90 and
+                                                                                   abs(a.age - b.age) <= 2 and
+                                                                                   b.t0 <= a.endfu <= b.endfu and 
+	                                                                           not (a.endfu = b.endfu and b.outcome = 1)
+	       8.  id = ID variable.  Example:  SCRPHIN
+	       9.  time0 = time 0 variable (i.e. cohort entry date)
+	       10. gender = gender variable (i.e. sex, male, female)
+	       11. agevar = age variable
+	       12. output_name = name of output matched dataset
+	       13. no_match = flag whether or not limiting cases to those with no matches on prior runs (Y/N).  If first run of matching this should be N (default) **;
+			  
+%macro risk_set_match (cohort_name = ,
+                       outcome_var = ,
+                       end_fu = ,
+                       randnum = ,
+                       K = ,
+		       control_index_dt = ,
+		       rs_match_where = ,
+		       id = ,
+		       time0 = ,
+		       gender = ,
+		       agevar = ,
+		       output_name = ,
+		       no_match = N
+                      );
+                 
+** Create cases and controls datasets **;
+data controls;
+   set &cohort_name;
+   caco = 0;
+run;
+
+data case;
+   set &cohort_name;
+   if &outcome_var = 1;
+   index_date = &end_fu;
+   format index_date yymmddd10.;
+run;
+
+%if &no_match=N %then %do;
+   ** Create a match_num variable (each case gets a differnt match_num value 1, 2, 3, ... N) **;    
+   proc sql;
+      create table case_caco1 as
+      select *, 1 as caco, monotonic() as match_num
+      from case;
+   quit;
+%end;
+%if &no_match=Y %then %do;
+   proc sort data=case_caco1;
+      by match_num;
+   run;
+   
+   proc sort data=no_match;
+      by match_num;
+   run;
+   
+   data case_caco1;
+      merge case_caco1 (in=a) no_match (in=b keep=match_num);
+	  by match_num;
+	  if a & b;
+   run;
+   
+   proc datasets library=work;
+      delete no_match;
+   quit;
+%end;
+
+** create a macro variable called N that has the value of the total number of cases in the cohort **;
+data _null_;
+   set case_caco1 end = last;
+   if last then call symput('N', match_num);
+run;
+
+%put &N;
+
+%macro do_first;
+   %do I = 1 %to &N;
+   data case_caco1_I;
+      set case_caco1;
+      if match_num = &I;
+   run;
+ 
+   ** Risk Set Matching - identifies all possible controls for a case 'I' that match on the criteria supplied to be included in the risk set **;
+   proc sql;
+      create table risk as
+      select a.&id as case_ID,
+             b.&id as control_ID,
+             a.&agevar as case_age,
+	         b.&agevar as control_age,
+             a.&gender as case_male,
+             b.&gender as control_male,
+             a.&time0 as case_t0,
+             b.&time0 as control_t0,
+	         a.&end_fu as case_endfu,
+             b.&end_fu as control_endfu,
+	         a.caco as case_caco,
+	         b.caco as control_caco,
+             a.index_date, 
+             a.match_num
+      from case_caco1_I a,
+           controls b
+      where &rs_match_where;
+   quit;
+
+   proc append base = risk_set data = risk; 
+   run;
+
+   %end;
+
+%mend;
+
+option nonotes;
+
+%do_first;
+
+option notes;
+
+proc sort data = risk_set;
+   by case_ID control_ID;
+run;
+
+data risk_set;
+   set risk_set;
+   rand_num = RANUNI(&randnum);
+run;
+
+%if &control_index_dt = case_event %then %do;
+   data risk_set;
+      set risk_set;
+	  index_date = index_date;
+	  format index_date yymmddd10.;
+   run;
+%end;
+
+%if &control_index_dt = case_fu %then %do;
+   data risk_set;
+      set risk_set;
+	  index_date = control_t0 + (case_endfu - case_t0);
+	  format index_date yymmddd10.;
+   run;
+%end;
+
+proc sort data = risk_set;
+   by case_ID rand_num;
+run;
+
+** Select first 'K' controls at random.  Also identifies those cases that had some matches but not the maximum 'K' number of matches **;
+data cohort_match not_enough;
+   set risk_set;
+   by case_ID;
+   retain num;
+   if first.case_ID then num = 1;
+   if num le &K then do;         ** K controls for each case **;
+      output cohort_match;
+      num=num+1;
+   end;
+   if last.case_ID then do;
+      if num le &k then output not_enough; 
+   end;
+run;
+
+** Collect all cases that do not qualify for the first round (had 0 matches based on the first set of matching criteria) **;
+proc sql;
+   create table no_match as
+   select *
+   from case_caco1     
+   where match_num not in (select match_num from cohort_match);
+quit;
+
+** Put the number of cases with no controls matched to it in the LOG **;
+%let dsid=%sysfunc(open(no_match));
+%let n_no_match=%sysfunc(attrn(&dsid,nlobs));
+%let rc=%sysfunc(close(&dsid));
+%put THERE ARE &n_no_match CASES WITHOUT A CONTROL MATCHED TO IT;
+
+** Create dataset of matched cases and controls **;
+proc sql;
+   create table matched_cases as
+   select *
+   from case_caco1    
+   where match_num in (select match_num from cohort_match)
+   order by match_num;
+
+   create table matched_controls as
+   select controls.*, match_num, index_date, num
+   from controls, cohort_match
+   where controls.&id = control_ID 
+   order by match_num, num;        
+quit;
+
+data &output_name;  
+   set matched_cases
+       matched_controls;
+   by match_num;
+   drop &outcome_var num;
+run;
+
+proc datasets nolist; 
+   delete controls case case_caco1_I risk risk_set cohort_match not_enough matched_cases matched_controls; 
+quit;
+
+%mend risk_set_match;
+
+
+
+/** EXAMPLE PROGRAM CALL 
+
+** FROM CNODES INCRETINS PROJECT:  Primary analysis for the pancreatic cancer study cohort - case control matching **;
+
+data cohort;
+   set project.dsen_incretins_study_cohort2_cov;
+   study_exit_date=end_fu_dt2;
+   dur_treated_diab=(study_entry_dt-bc_prvddt);
+   dur_fup=(study_exit_date-(study_entry_dt+365))+1;
+   format study_exit_date yymmddd10.;
+run;
+
+%risk_set_match (cohort_name = cohort,
+                       outcome_var = outcome2,
+                       end_fu = study_exit_date,
+                       randnum = 123,
+                       K = 20,
+		       control_index_dt = case_fu,
+		       rs_match_where = a.sex=b.sex
+	                                and abs(a.study_entry_dt-b.study_entry_dt)<=180
+                                        and abs((a.study_entry_dt - a.birthdt)-(b.study_entry_dt - b.birthdt))<=365
+                                        and abs(a.dur_treated_diab-b.dur_treated_diab)<=90
+                                        and (a.dur_fup <= b.dur_fup) and not (a.study_exit_date=b.study_exit_date and b.outcome2=1),
+		       id = scrphin,
+		       time0 = study_entry_dt,
+		       gender = sex,
+		       agevar = bc_age,
+		       output_name = matched1,
+		       no_match = N
+                      );
+
+** Because there were some cases that did not have a match, try to find at least one match by expanding the age window from 1 year (365 days) to 2 year (730 days) **;					  
+%risk_set_match (cohort_name = cohort,
+                       outcome_var = outcome2,
+                       end_fu = study_exit_date,
+                       randnum = 123,
+                       K = 20,
+		       control_index_dt = case_fu,
+		       rs_match_where = a.sex=b.sex 
+	                                and abs(a.study_entry_dt-b.study_entry_dt)<=180
+                                        and abs((a.study_entry_dt - a.birthdt)-(b.study_entry_dt - b.birthdt))<=730
+                                        and abs(a.dur_treated_diab-b.dur_treated_diab)<=90
+                                        and (a.dur_fup <= b.dur_fup) and not (a.study_exit_date=b.study_exit_date and b.outcome2=1),
+		       id = scrphin,
+		       time0 = study_entry_dt,
+		       gender = sex,
+		       agevar = bc_age,
+		       output_name = matched2,
+		       no_match = Y
+                      );
+
+** Set the matched sets together **;					  
+data matched;
+   set matched1 (keep=scrphin sex st_age st_agegrp caco index_date study_entry_dt match_num birthdt bc_prvddt study_cyear dur_treated_diab alcohol pancreatitis statin neuropathy renal retinal
+                      p_arterio nhosps_grp nhosps nmeds_grp nmeds nmeds_ad_grp nmeds_ad dpp4 glp1 insulin meglitinide metformin other sulfonylurea thiazolidinedione study_exit_date dur_fup male alpha_glucosidase)
+       matched2 (keep=scrphin sex st_age st_agegrp caco index_date study_entry_dt match_num birthdt bc_prvddt study_cyear dur_treated_diab alcohol pancreatitis statin neuropathy renal retinal
+                      p_arterio nhosps_grp nhosps nmeds_grp nmeds nmeds_ad_grp nmeds_ad dpp4 glp1 insulin meglitinide metformin other sulfonylurea thiazolidinedione study_exit_date dur_fup male alpha_glucosidase);
+run;
+
+**/
