@@ -44,11 +44,11 @@ p2<-ggplot(data=interv,aes(x=year(dt_interv)))+geom_bar(fill='#6633CC')+
 grid.arrange(p1,p2, nrow=1, ncol=2)
 
 #what about billing information?
-bill2<-bill2%>%group_by(nam)%>%
-               filter(dt_serv==min(dt_serv))%>%
-               ungroup()%>%
-               select(nam,dt_serv,dt_index,age,sexe)%>%
-               distinct()
+#bill2<-bill2%>%group_by(nam)%>%
+#               filter(dt_serv==min(dt_serv))%>%
+#              ungroup()%>%
+#               select(nam,dt_serv,dt_index,age,sexe)%>%
+#              distinct()
 
 #merged_tb includes patients with previous history of AS
 
